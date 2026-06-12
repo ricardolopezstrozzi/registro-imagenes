@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Registro de Imágenes</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      background: #f0f4f8;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+    }
+    .card {
+      background: #fff;
+      border-radius: 12px;
+      box-shadow: 0 4px 20px rgba(0,0,0,.08);
+      padding: 32px;
+      width: 100%;
+      max-width: 440px;
+    }
+    h1 { font-size: 22px; color: #1a2b4a; margin-bottom: 4px; }
+    p.sub { color: #6b7a90; font-size: 14px; margin-bottom: 24px; }
+    label { display: block; font-size: 13px; font-weight: 600; color: #1a2b4a; margin: 14px 0 6px; }
+    input[type="text"], textarea, select {
+      width: 100%;
+      padding: 10px 12px;
+      border: 1px solid #d5dde8;
+      border-radius: 8px;
+      font-size: 14px;
+      font-family: inherit;
+    }
+    textarea { resize: vertical; min-height: 70px; }
+    .dropzone {
+      border: 2px dashed #b8c5d6;
+      border-radius: 8px;
+      padding: 24px;
+      text-align: center;
+      color: #6b7a90;
+      font-size: 14px;
+      cursor: pointer;
+      transition: border-color .2s;
+    }
+    .dropzone:hover { border-color: #2563eb; }
+    .dropzone img { max-width: 100%; max-height: 180px; border-radius: 6px; margin-top: 8px; }
+    button {
+      width: 100%;
+      margin-top: 22px;
+      padding: 12px;
+      background: #2563eb;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    button:disabled { background: #9db5e8; cursor: wait; }
+    .msg { margin-top: 16px; padding: 12px; border-radius: 8px; font-size: 14px; display: none; }
+    .msg.ok { background: #e7f7ee; color: #15803d; display: block; }
+    .msg.err { background: #fdeaea; color: #b91c1c; display: block; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>📸 Registro de Imágenes</h1>
+    <p class="sub">La imagen se guarda automáticamente en Drive.</p>
+
+    <form id="form">
+      <label>Imagen *</label>
+      <div class="dropzone" id="dropzone">
+        <span id="dz-text">Toca aquí para elegir o tomar una foto</span>
+        <img id="preview" style="display:none">
+      </div>
+      <input type="file" id="file" accept="image/*" hidden>
+
+      <label>Nombre de quien registra *</label>
+      <input type="text" id="autor" required placeholder="Tu nombre">
+
+      <label>Categoría</label>
+      <select id="categoria">
+        <option>General</option>
+        <option>Evidencia</option>
+        <option>Producto</option>
+        <option>Cliente</option>
+        <option>Otro</option>
+      </select>
+
+      <label>Notas</label>
+      <textarea id="notas" placeholder="Descripción opcional..."></textarea>
+
+      <button type="submit" id="btn">Subir a Drive</button>
+      <div class="msg" id="msg"></div>
+    </form>
+  </div>
+
+  <script>
+    // ⚠️ PEGA AQUÍ LA URL DE TU WEB APP DE APPS SCRIPT (termina en /exec)
+    const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbybVkaAus4nb7Tv-4bQLoaAnwbP0YVL0vjlfhXW4-jkgS34KhtlHKY1L35cTTqnyME-/exec';
+
+    const fileInput = document.getElementById('file');
+    const dropzone  = document.getElementById('dropzone');
+    const preview   = document.getElementById('preview');
+    const dzText    = document.getElementById('dz-text');
+    const form      = document.getElementById('form');
+    const btn       = document.getElementById('btn');
+    const msg       = document.getElementById('msg');
+
+    dropzone.addEventListener('click', () => fileInput.click());
+
+    fileInput.addEventListener('change', () => {
+      const f = fileInput.files[0];
+      if (!f) return;
+      preview.src = URL.createObjectURL(f);
+      preview.style.display = 'block';
+      dzText.textContent = f.name;
+    });
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const f = fileInput.files[0];
+      if (!f) { showMsg('Selecciona una imagen primero.', 'err'); return; }
+      if (f.size > 20 * 1024 * 1024) { showMsg('La imagen no debe superar 20 MB.', 'err'); return; }
+
+      btn.disabled = true;
+      btn.textContent = 'Subiendo...';
+      msg.className = 'msg';
+
+      try {
+        const base64 = await toBase64(f);
+        const payload = {
+          fileName: f.name,
+          mimeType: f.type,
+          data: base64,
+          autor: document.getElementById('autor').value,
+          categoria: document.getElementById('categoria').value,
+          notas: document.getElementById('notas').value
+        };
+
+        const res = await fetch(SCRIPT_URL, {
+          method: 'POST',
+          // text/plain evita el preflight CORS que Apps Script no soporta
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify(payload)
+        });
+        const out = await res.json();
+
+        if (out.status === 'ok') {
+          showMsg('✅ Imagen registrada en Drive.', 'ok');
+          form.reset();
+          preview.style.display = 'none';
+          dzText.textContent = 'Toca aquí para elegir o tomar una foto';
+        } else {
+          throw new Error(out.message || 'Error desconocido');
+        }
+      } catch (err) {
+        showMsg('❌ Error: ' + err.message, 'err');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Subir a Drive';
+      }
+    });
+
+    function toBase64(file) {
+      return new Promise((resolve, reject) => {
+        const r = new FileReader();
+        r.onload = () => resolve(r.result.split(',')[1]); // quita el prefijo data:...;base64,
+        r.onerror = reject;
+        r.readAsDataURL(file);
+      });
+    }
+
+    function showMsg(text, type) {
+      msg.textContent = text;
+      msg.className = 'msg ' + type;
+    }
+  </script>
+</body>
+</html>
