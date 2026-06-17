@@ -73,10 +73,10 @@
     <form id="form">
       <label>Imagen *</label>
       <div class="dropzone" id="dropzone">
-        <span id="dz-text">Toca aquí para elegir o tomar una foto</span>
+        <span id="dz-text">Toca aquí para tomar una foto</span>
         <img id="preview" style="display:none">
       </div>
-      <input type="file" id="file" accept="image/*" hidden>
+      <input type="file" id="file" accept="image/*" capture="environment" hidden>
 
       <label>Nombre de quien registra *</label>
       <input type="text" id="autor" required placeholder="Tu nombre">
@@ -153,7 +153,7 @@
           showMsg('✅ Imagen registrada en Drive.', 'ok');
           form.reset();
           preview.style.display = 'none';
-          dzText.textContent = 'Toca aquí para elegir o tomar una foto';
+          dzText.textContent = 'Toca aquí para tomar una foto';
         } else {
           throw new Error(out.message || 'Error desconocido');
         }
