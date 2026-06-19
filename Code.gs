@@ -10,6 +10,7 @@
 
 const FOLDER_NAME = 'Registro Imagenes App';
 const SHEET_NAME  = 'Registro Imagenes App';
+const NOTIFICATION_EMAIL = 'primesincro@gmail.com';
 
 function doPost(e) {
   try {
@@ -24,6 +25,7 @@ function doPost(e) {
     const name  = stamp + '_' + (body.fileName || 'imagen.jpg');
     const blob  = Utilities.newBlob(bytes, body.mimeType || 'image/jpeg', name);
     const file  = folder.createFile(blob);
+    const fileUrl = file.getUrl();
 
     // 3. Registrar en la hoja de cálculo
     const sheet = getOrCreateSheet_(SHEET_NAME);
@@ -33,10 +35,20 @@ function doPost(e) {
       body.categoria || '',
       body.notas || '',
       name,
-      file.getUrl()
+      fileUrl
     ]);
 
-    return jsonOut_({ status: 'ok', fileUrl: file.getUrl() });
+    let emailSent = false;
+    let emailError = '';
+    try {
+      sendNotificationEmail_(body, name, fileUrl);
+      emailSent = true;
+    } catch (mailErr) {
+      emailError = mailErr.message;
+      console.error('No se pudo enviar el correo: ' + emailError);
+    }
+
+    return jsonOut_({ status: 'ok', fileUrl: fileUrl, emailSent: emailSent, emailError: emailError });
   } catch (err) {
     return jsonOut_({ status: 'error', message: err.message });
   }
@@ -59,8 +71,38 @@ function getOrCreateSheet_(name) {
   return ss.getActiveSheet();
 }
 
+function sendNotificationEmail_(body, fileName, fileUrl) {
+  const autor = body.autor || 'Sin nombre';
+  const categoria = body.categoria || 'General';
+  const notas = body.notas || '';
+  const fecha = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm:ss');
+
+  MailApp.sendEmail({
+    to: NOTIFICATION_EMAIL,
+    subject: 'Nuevo registro de imagen',
+    htmlBody: [
+      '<h2>Nuevo registro de imagen</h2>',
+      '<p><strong>Fecha:</strong> ' + escapeHtml_(fecha) + '</p>',
+      '<p><strong>Autor:</strong> ' + escapeHtml_(autor) + '</p>',
+      '<p><strong>Categoria:</strong> ' + escapeHtml_(categoria) + '</p>',
+      '<p><strong>Notas:</strong> ' + escapeHtml_(notas) + '</p>',
+      '<p><strong>Archivo:</strong> ' + escapeHtml_(fileName) + '</p>',
+      '<p><a href="' + fileUrl + '">Ver imagen en Drive</a></p>'
+    ].join('')
+  });
+}
+
 function jsonOut_(obj) {
   return ContentService
     .createTextOutput(JSON.stringify(obj))
     .setMimeType(ContentService.MimeType.JSON);
+}
+
+function escapeHtml_(value) {
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }
